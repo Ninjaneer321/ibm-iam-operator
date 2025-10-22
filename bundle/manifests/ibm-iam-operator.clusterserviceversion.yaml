@@ -2,7 +2,7 @@ apiVersion: operators.coreos.com/v1alpha1
 kind: ClusterServiceVersion
 metadata:
   annotations:
-    alm-examples: |
+    alm-examples: |-
       [
         {
           "apiVersion": "operator.ibm.com/v1alpha1",
@@ -24,7 +24,7 @@ metadata:
             "authService": {
               "imageName": "icp-platform-auth",
               "imageRegistry": "icr.io/cpopen/cpfs",
-              "imageTag": "4.10.0",
+              "imageTag": "4.15.0",
               "ldapsCACert": "platform-auth-ldaps-ca-cert",
               "resources": {
                 "limits": {
@@ -43,7 +43,7 @@ metadata:
             "clientRegistration": {
               "imageName": "im-initcontainer",
               "imageRegistry": "icr.io/cpopen/cpfs",
-              "imageTag": "4.10.0",
+              "imageTag": "4.15.0",
               "resources": {
                 "limits": {
                   "cpu": "1000m",
@@ -57,6 +57,9 @@ metadata:
               }
             },
             "config": {
+              "accountIamURL": "",
+              "auditSecret": "",
+              "auditUrl": "",
               "authUniqueHosts": "internal-ip1 internal-ip2 mycluster.icp",
               "bootstrapUserId": "kubeadmin",
               "claimsMap": "name=\"givenName\" family_name=\"givenName\" given_name=\"givenName\" preferred_username=\"displayName\" display_name=\"displayName\"",
@@ -67,6 +70,7 @@ metadata:
               "clusterName": "mycluster",
               "defaultAdminPassword": "password",
               "defaultAdminUser": "cpadmin",
+              "defaultLogin": "",
               "enableImpersonation": false,
               "fipsEnabled": true,
               "ibmCloudSaas": false,
@@ -85,6 +89,7 @@ metadata:
               "scimAdminPassword": "scimpassword",
               "scimAdminUser": "scimadmin",
               "scopeClaim": "profile=\"name,family_name,display_name,given_name,preferred_username\"",
+              "useSecretsStoreCSI": false,
               "wlpClientID": "4444be3a738841016ab76d71b650e836",
               "wlpClientRegistrationSecret": "f1362ca4d20b8389af2d1ea68042c9af",
               "wlpClientSecret": "aa73bf39752053bf723d1143fb4cf8a2",
@@ -94,7 +99,7 @@ metadata:
             "identityManager": {
               "imageName": "icp-identity-manager",
               "imageRegistry": "icr.io/cpopen/cpfs",
-              "imageTag": "4.10.0",
+              "imageTag": "4.15.0",
               "masterNodesList": "10.0.0.1",
               "resources": {
                 "limits": {
@@ -112,7 +117,7 @@ metadata:
             "identityProvider": {
               "imageName": "icp-identity-provider",
               "imageRegistry": "icr.io/cpopen/cpfs",
-              "imageTag": "4.10.0",
+              "imageTag": "4.15.0",
               "resources": {
                 "limits": {
                   "cpu": "1000m",
@@ -129,7 +134,7 @@ metadata:
             "initMongodb": {
               "imageName": "im-initcontainer",
               "imageRegistry": "icr.io/cpopen/cpfs",
-              "imageTag": "4.10.0",
+              "imageTag": "4.15.0",
               "resources": {
                 "limits": {
                   "cpu": "100m",
@@ -145,58 +150,24 @@ metadata:
             "operatorVersion": "0.14.1",
             "replicas": 1
           }
-        },
-        {
-          "apiVersion": "operator.ibm.com/v1alpha1",
-          "kind": "OperandBindInfo",
-          "metadata": {
-            "name": "ibm-iam-bindinfo"
-          },
-          "spec": {
-            "operand": "ibm-im-operator",
-            "registry": "common-service",
-            "description": "Binding information that should be accessible to iam adopters",
-            "bindings": {
-              "public-oidc-creds": {
-                "secret": "platform-oidc-credentials"
-              },
-              "public-auth-creds": {
-                "secret": "platform-auth-idp-credentials"
-              },
-              "public-scim-creds": {
-                "secret": "platform-auth-scim-credentials"
-              },
-              "public-auth-cert": {
-                "secret": "platform-auth-secret"
-              },
-              "public-cam-secret": {
-                "secret": "oauth-client-secret"
-              },
-              "public-cam-map": {
-                "configmap": "oauth-client-map"
-              },
-              "public-auth-config": {
-                "configmap": "platform-auth-idp"
-              },
-              "public-ibmcloud-config": {
-                "configmap": "ibmcloud-cluster-info"
-              },
-              "public-ibmcloudca-secret": {
-                "secret": "ibmcloud-cluster-ca-cert"
-              }
-            }
-          }
         }
       ]
     capabilities: Basic Install
     categories: Security
     certified: "false"
-    containerImage: icr.io/cpopen/ibm-iam-operator:4.10.0
-    createdAt: "2024-10-14T17:39:53Z"
+    containerImage: icr.io/cpopen/ibm-iam-operator:4.15.0
+    createdAt: "2025-10-20T18:42:19Z"
     description: The IAM operator provides a simple Kubernetes CRD-Based API to manage the lifecycle of IAM services. With this operator, you can simply deploy and upgrade the IAM services
-    olm.skipRange: <4.10.0
+    features.operators.openshift.io/disconnected: "true"
+    features.operators.openshift.io/fips-compliant: "true"
+    features.operators.openshift.io/proxy-aware: "false"
+    features.operators.openshift.io/tls-profiles: "false"
+    features.operators.openshift.io/token-auth-aws: "false"
+    features.operators.openshift.io/token-auth-azure: "false"
+    features.operators.openshift.io/token-auth-gcp: "false"
+    olm.skipRange: <4.15.0
     operators.operatorframework.io/builder: operator-sdk-v1.37.0
-    operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
+    operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
     repository: https://github.com/IBM/ibm-iam-operator
     support: IBM
   labels:
@@ -204,7 +175,7 @@ metadata:
     operatorframework.io/arch.ppc64le: supported
     operatorframework.io/arch.s390x: supported
     operatorframework.io/os.linux: supported
-  name: ibm-iam-operator.v4.10.0
+  name: ibm-iam-operator.v4.15.0
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -261,20 +232,6 @@ spec:
     spec:
       clusterPermissions:
         - rules:
-            - apiGroups:
-                - config.openshift.io
-              resources:
-                - ingresses
-              verbs:
-                - get
-            - apiGroups:
-                - ""
-              resourceNames:
-                - console-config
-              resources:
-                - configmaps
-              verbs:
-                - get
             - apiGroups:
                 - rbac.authorization.k8s.io
               resources:
@@ -353,16 +310,34 @@ spec:
                       - name: ROUTE_HTTPS_PORT
                       - name: cluster_name
                       - name: ICP_PLATFORM_AUTH_IMAGE
-                        value: icr.io/cpopen/cpfs/icp-platform-auth:4.10.0
+                        value: icr.io/cpopen/cpfs/icp-platform-auth:4.15.0
                       - name: ICP_IDENTITY_PROVIDER_IMAGE
-                        value: icr.io/cpopen/cpfs/icp-identity-provider:4.10.0
+                        value: icr.io/cpopen/cpfs/icp-identity-provider:4.15.0
                       - name: ICP_IDENTITY_MANAGER_IMAGE
-                        value: icr.io/cpopen/cpfs/icp-identity-manager:4.10.0
+                        value: icr.io/cpopen/cpfs/icp-identity-manager:4.15.0
                       - name: IM_INITCONTAINER_IMAGE
-                        value: icr.io/cpopen/cpfs/im-initcontainer:4.10.0
-                    image: icr.io/cpopen/ibm-iam-operator:4.10.0
+                        value: icr.io/cpopen/cpfs/im-initcontainer:4.15.0
+                      - name: IM_DB_MIGRATOR_IMAGE
+                        value: icr.io/cpopen/cpfs/ibm-im-db-migrator:4.15.0
+                    image: icr.io/cpopen/ibm-iam-operator:4.15.0
                     imagePullPolicy: IfNotPresent
+                    livenessProbe:
+                      failureThreshold: 10
+                      httpGet:
+                        path: /healthz
+                        port: 8081
+                      initialDelaySeconds: 120
+                      periodSeconds: 60
+                      timeoutSeconds: 10
                     name: ibm-iam-operator
+                    readinessProbe:
+                      failureThreshold: 10
+                      httpGet:
+                        path: /readyz
+                        port: 8081
+                      initialDelaySeconds: 3
+                      periodSeconds: 20
+                      timeoutSeconds: 3
                     resources:
                       limits:
                         cpu: 25m
@@ -527,6 +502,7 @@ spec:
                 - operator.ibm.com
               resources:
                 - operandrequests
+                - operandbindinfos
               verbs:
                 - create
                 - get
@@ -539,6 +515,7 @@ spec:
                 - operator.ibm.com
               resources:
                 - operandrequests/status
+                - operandbindinfos/status
               verbs:
                 - watch
                 - get
@@ -622,6 +599,35 @@ spec:
                 - patch
                 - update
                 - watch
+            - apiGroups:
+                - autoscaling
+              resources:
+                - horizontalpodautoscalers
+              verbs:
+                - create
+                - delete
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - postgresql.k8s.enterprisedb.io
+              resources:
+                - clusters
+                - clusters/status
+              verbs:
+                - get
+                - list
+                - watch
+            - apiGroups:
+                - secrets-store.csi.x-k8s.io
+              resources:
+                - secretproviderclasses
+              verbs:
+                - get
+                - list
+                - watch
           serviceAccountName: ibm-iam-operator
     strategy: deployment
   installModes:
@@ -642,17 +648,15 @@ spec:
   maturity: stable
   provider:
     name: IBM
-  version: 4.10.0
+  version: 4.15.0
   relatedImages:
-    - image: icr.io/cpopen/ibm-iam-operator:4.10.0
+    - image: icr.io/cpopen/ibm-iam-operator:4.15.0
       name: IBM_IAM_OPERATOR_IMAGE
-    - image: icr.io/cpopen/cpfs/icp-platform-auth:4.10.0
+    - image: icr.io/cpopen/cpfs/icp-platform-auth:4.15.0
       name: ICP_PLATFORM_AUTH_IMAGE
-    - image: icr.io/cpopen/cpfs/icp-identity-provider:4.10.0
+    - image: icr.io/cpopen/cpfs/icp-identity-provider:4.15.0
       name: ICP_IDENTITY_PROVIDER_IMAGE
-    - image: icr.io/cpopen/cpfs/icp-identity-manager:4.10.0
+    - image: icr.io/cpopen/cpfs/icp-identity-manager:4.15.0
       name: ICP_IDENTITY_MANAGER_IMAGE
-    - image: icr.io/cpopen/cpfs/im-initcontainer:4.10.0
+    - image: icr.io/cpopen/cpfs/im-initcontainer:4.15.0
       name: IM_INITCONTAINER_IMAGE
-    - image: icr.io/cpopen/cpfs/iam-custom-hostname:4.10.0
-      name: IAM_CUSTOM_HOSTNAME_IMAGE

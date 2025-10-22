@@ -27,7 +27,7 @@ For more information about the available IBM Cloud Platform Common Services, see
 
 ## Operator versions
 
-- 4.10.0
+- 4.15.0
 
 ## Prerequisites
 
@@ -65,3 +65,4 @@ The IM operator runs under a restricted security context constraint with a non r
 ## Developer Guide
 
 For more information on how to develop and build this project, please see [DEVELOPMENT.md](DEVELOPMENT.md).
+

@@ -1,0 +1,26 @@
+cpfs:
+  imageRegistryNamespaceOperator: cpopen
+  imageRegistryNamespaceOperand: cpopen/cpfs
+  labels:
+global:
+  operatorNamespace: operators
+  instanceNamespace: instance
+  imagePullPrefix: icr.io
+  imagePullSecret: ibm-entitlement-key
+  imagePullPolicy: IfNotPresent
+  tetheredNamespaces:
+    - tenant1
+    - tenant2
+operator:
+  imageTag: "4.15.0"
+operands:
+  platformIdentityProvider:
+    imageTag: "4.15.0"
+  platformAuthService:
+    imageTag: "4.15.0"
+  platformIdentityManagement:
+    imageTag: "4.15.0"
+  imInitContainer:
+    imageTag: "4.15.0"
+  imDBMigrator:
+    imageTag: "1.0.0"

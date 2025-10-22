@@ -125,6 +125,9 @@ spec:
                 - ldapsCACert
                 - routerCertSecret
                 type: object
+              autoScaleConfig:
+                description: AutoScaleConfig is a boolean to enable or disable HPA
+                type: boolean
               clientRegistration:
                 properties:
                   imageName:
@@ -167,8 +170,14 @@ spec:
                 type: object
               config:
                 properties:
+                  accountIamURL:
+                    type: string
                   attrMappingFromConfig:
                     type: boolean
+                  auditSecret:
+                    type: string
+                  auditUrl:
+                    type: string
                   authUniqueHosts:
                     type: string
                   bootstrapUserId:
@@ -189,6 +198,8 @@ spec:
                     type: string
                   defaultAdminUser:
                     type: string
+                  defaultLogin:
+                    type: string
                   enableImpersonation:
                     type: boolean
                   fipsEnabled:
@@ -198,6 +209,14 @@ spec:
                   icpPort:
                     format: int32
                     type: integer
+                  ingress:
+                    properties:
+                      hostname:
+                        type: string
+                      secret:
+                        type: string
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
                   installType:
                     type: string
                   isOpenshiftEnv:
@@ -229,6 +248,8 @@ spec:
                     type: string
                   scopeClaim:
                     type: string
+                  useSecretsStoreCSI:
+                    type: boolean
                   wlpClientID:
                     type: string
                   wlpClientRegistrationSecret:
@@ -262,6 +283,7 @@ spec:
                 - wlpClientRegistrationSecret
                 - wlpClientSecret
                 type: object
+                x-kubernetes-preserve-unknown-fields: true
               enableInstanaMetricCollection:
                 type: boolean
               identityManager:

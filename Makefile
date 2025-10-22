@@ -21,10 +21,12 @@
 BUILD_LOCALLY ?= 1
 
 # The namespace that operator will be deployed in
-NAMESPACE=ibm-common-services
+CONTROL_NS ?= ibm-common-services
+DATA_NS ?= $(CONTROL_NS)
+WATCH_NS ?= $(DATA_NS)
+
 GIT_COMMIT_ID=$(shell git rev-parse --short HEAD)
-GIT_REMOTE_URL=$(shell git config --get remote.origin.url)
-IMAGE_BUILD_OPTS=--build-arg "VCS_REF=$(GIT_COMMIT_ID)" --build-arg "VCS_URL=$(GIT_REMOTE_URL)"
+IMAGE_BUILD_OPTS=--build-arg "VCS_REF=$(GIT_COMMIT_ID)" --build-arg "IMG_VERSION=$(VERSION)" --build-arg "IMG_RELEASE=$(shell date +%s)"
 
 # Image URL to use all building/pushing image targets;
 # Use your own docker registry and image name for dev/test by overridding the IMG and REGISTRY environment variable.
@@ -34,13 +36,10 @@ CONTAINER_CLI ?= docker
 
 MARKDOWN_LINT_WHITELIST=https://quay.io/cnr
 
-ifeq ($(BUILD_LOCALLY),0)
-    export CONFIG_DOCKER_TARGET = config-docker
-endif
 
 TESTARGS_DEFAULT := "-v"
 export TESTARGS ?= $(TESTARGS_DEFAULT)
-BUNDLE_VERSION ?= $(shell cat ./version/version.go | grep "Version =" | awk '{ print $$3}' | tr -d '"')
+BUNDLE_VERSION ?= $(shell grep "Version =" ./internal/version/version.go | cut -d'"' -f2)
 VERSION ?= $(BUNDLE_VERSION)
 
 LOCAL_OS := $(shell uname)
@@ -60,11 +59,15 @@ endif
 
 include common/Makefile.common.mk
 
+CHANNEL ?= v$(shell cut -f1,2 -d'.' <<<$(BUNDLE_VERSION))
+
 # CHANNELS define the bundle channels used in the bundle.
 # Add a new line here if you would like to change its default config. (E.g CHANNELS = "candidate,fast,stable")
 # To re-generate a bundle for other specific channels without changing the standard setup, you can:
 # - use the CHANNELS as arg of the bundle target (e.g make bundle CHANNELS=candidate,fast,stable)
 # - use environment variables to overwrite this value (e.g export CHANNELS="candidate,fast,stable")
+CHANNELS ?= $(CHANNEL)
+
 ifneq ($(origin CHANNELS), undefined)
 BUNDLE_CHANNELS := --channels=$(CHANNELS)
 endif
@@ -74,6 +77,8 @@ endif
 # To re-generate a bundle for any other default channel without changing the default setup, you can:
 # - use the DEFAULT_CHANNEL as arg of the bundle target (e.g make bundle DEFAULT_CHANNEL=stable)
 # - use environment variables to overwrite this value (e.g export DEFAULT_CHANNEL="stable")
+DEFAULT_CHANNEL ?= $(CHANNEL)
+
 ifneq ($(origin DEFAULT_CHANNEL), undefined)
 BUNDLE_DEFAULT_CHANNEL := --default-channel=$(DEFAULT_CHANNEL)
 endif
@@ -95,8 +100,6 @@ BUNDLE_GEN_FLAGS ?= -q --overwrite --version $(BUNDLE_VERSION) $(BUNDLE_METADATA
 
 BUNDLE_DOCKERFILE ?= bundle.Dockerfile
 
-CHANNEL ?= v$(shell cut -f1,2 -d'.' <<<$(BUNDLE_VERSION))
-
 MODE ?= prod
 
 ifeq ($(MODE), dev)
@@ -114,8 +117,6 @@ endif
 
 # Image URL to use all building/pushing image targets
 IMG ?= controller:latest
-# ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
-ENVTEST_K8S_VERSION = 1.26.0
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -156,19 +157,30 @@ LOCALBIN ?= $(shell pwd)/bin
 $(LOCALBIN):
 	mkdir -p $(LOCALBIN)
 
-## Tool Binaries
+## Local Tool Binaries
+KUBECTL ?= kubectl
+KIND ?= kind
+
+## Repo Tool Binaries
 KUSTOMIZE ?= $(LOCALBIN)/kustomize
 YQ ?= $(LOCALBIN)/yq
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 OPERATOR_SDK ?= $(LOCALBIN)/operator-sdk
 ENVTEST ?= $(LOCALBIN)/setup-envtest
+GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
 
 ## Tool Versions
-KUSTOMIZE_VERSION ?= v5.4.3
-CONTROLLER_TOOLS_VERSION ?= v0.16.3
+KUSTOMIZE_VERSION ?= v5.7.0
+CONTROLLER_TOOLS_VERSION ?= v0.17.2
 OPERATOR_SDK_VERSION ?= v1.37.0
 YQ_VERSION ?= v4.44.3
-GO_VERSION ?= 1.23.1
+GO_VERSION ?= 1.25.0
+
+#ENVTEST_VERSION is the version of controller-runtime release branch to fetch the envtest setup script (i.e. release-0.20)
+ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $$2, $$3}')
+#ENVTEST_K8S_VERSION is the version of Kubernetes to use for setting up ENVTEST binaries (i.e. 1.31)
+ENVTEST_K8S_VERSION ?= $(shell go list -m -f "{{ .Version }}" k8s.io/api | awk -F'[v.]' '{printf "1.%d", $$3}')
+GOLANGCI_LINT_VERSION ?= v1.63.4
 
 # This pinned version of go has its version pinned to its name, so order of operations is inverted here.
 GO ?= $(LOCALBIN)/go$(GO_VERSION)
@@ -198,8 +210,7 @@ $(KUSTOMIZE): $(LOCALBIN) go
 .PHONY: controller-gen
 controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary. If wrong version is installed, it will be overwritten.
 $(CONTROLLER_GEN): $(LOCALBIN) go
-	test -s $(LOCALBIN)/controller-gen && $(LOCALBIN)/controller-gen --version | grep -q $(CONTROLLER_TOOLS_VERSION) || \
-	GOSUMDB=sum.golang.org GOBIN=$(LOCALBIN) $(GO) install sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_TOOLS_VERSION)
+	$(call go-install-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen,$(CONTROLLER_TOOLS_VERSION))
 
 .PHONY: operator-sdk
 operator-sdk: $(OPERATOR_SDK) ## Download operator-sdk locally if necessary. If wrong version is installed, it will be overwritten.
@@ -219,16 +230,26 @@ $(OPERATOR_SDK): $(LOCALBIN) go
 .PHONY: yq
 yq: $(YQ)
 $(YQ): $(LOCALBIN) go
-	@if test -x $(LOCALBIN)/yq && ! $(LOCALBIN)/yq --version | grep -q $(YQ_VERSION); then \
-		echo "$(LOCALBIN)/yq version is not expected $(YQ_VERSION). Removing it before installing."; \
-		rm -rf $(LOCALBIN)/yq; \
-	fi
-	test -s $(LOCALBIN)/yq || GOSUMDB=sum.golang.org GOBIN=$(LOCALBIN) $(GO) install github.com/mikefarah/yq/v4@$(YQ_VERSION)
+	$(call go-install-tool,$(YQ),github.com/mikefarah/yq/v4,$(YQ_VERSION))
+
+.PHONY: setup-envtest
+setup-envtest: envtest ## Download the binaries required for ENVTEST in the local bin directory.
+	@echo "Setting up envtest binaries for Kubernetes version $(ENVTEST_K8S_VERSION)..."
+	@echo "$(ENVTEST) $(ENVTEST_K8S_VERSION)"
+	@$(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path || { \
+		echo "Error: Failed to set up envtest binaries for version $(ENVTEST_K8S_VERSION)."; \
+		exit 1; \
+	}
 
 .PHONY: envtest
 envtest: $(ENVTEST) ## Download envtest-setup locally if necessary.
 $(ENVTEST): $(LOCALBIN) go
-	test -s $(LOCALBIN)/setup-envtest || GOSUMDB=sum.golang.org GOBIN=$(LOCALBIN) $(GO) install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+	$(call go-install-tool,$(ENVTEST),sigs.k8s.io/controller-runtime/tools/setup-envtest,$(ENVTEST_VERSION))
+
+.PHONY: golangci-lint
+golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
+$(GOLANGCI_LINT): $(LOCALBIN)
+	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
 
 .PHONY: opm
 OPM = ./bin/opm
@@ -288,28 +309,54 @@ fmt: go ## Run go fmt against code.
 
 .PHONY: vet
 vet: ## Run go vet against code.
-	go vet ./...
+	$(GO) vet ./...
 
 .PHONY: test
 test: manifests generate fmt vet envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test ./... -coverprofile cover.out
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" $(GO) test $$(go list ./... | grep -v /e2e) -coverprofile cover.out
+
+# The default setup assumes Kind is pre-installed and builds/loads the Manager Docker image locally.
+# CertManager is installed by default; skip with:
+# - CERT_MANAGER_INSTALL_SKIP=true
+.PHONY: test-e2e
+test-e2e: go manifests generate fmt vet ## Run the e2e tests. Expected an isolated environment using Kind.
+	@command -v $(KIND) >/dev/null 2>&1 || { \
+		echo "Kind is not installed. Please install Kind manually."; \
+		exit 1; \
+	}
+	@$(KIND) get clusters | grep -q 'kind' || { \
+		echo "No Kind cluster is running. Please start a Kind cluster before running the e2e tests."; \
+		exit 1; \
+	}
+	$(GO) test ./test/e2e/ -v -ginkgo.v
 
 .PHONY: update-version
 update-version: manifests kustomize yq ## Update the Operator SemVer across the project.
 	./hack/update_operator_version
 
+.PHONY: lint
+lint: golangci-lint ## Run golangci-lint linter
+	$(GOLANGCI_LINT) run
+
+.PHONY: lint-fix
+lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
+	$(GOLANGCI_LINT) run --fix
+
+.PHONY: lint-config
+lint-config: golangci-lint ## Verify golangci-lint linter configuration
+	$(GOLANGCI_LINT) config verify
 
 ##@ Build
 
 .PHONY: build
 build: go manifests generate fmt vet ## Build manager binary.
 	@echo "Building the manager binary"
-	@CGO_ENABLED=0 $(GO) build -o build/_output/bin/manager main.go
+	@CGO_ENABLED=0 $(GO) build -o build/_output/bin/manager cmd/main.go
 	@strip $(STRIP_FLAGS) build/_output/bin/manager
 
 .PHONY: run
 run: go manifests generate fmt vet ## Run a controller from your host.
-	$(GO) run ./main.go
+	$(GO) run ./cmd/main.go
 
 .PHONY: licenses-dir
 licenses-dir:
@@ -362,10 +409,9 @@ bundle-render: ## Render the bundle contents into the local FBC index.
 	./hack/bundle-render $(IMG).v$(BUNDLE_VERSION) $(BUNDLE_IMG)
 
 TARGET_ARCH=$(LOCAL_ARCH)
-
-build-image: $(GO) $(CONFIG_DOCKER_TARGET) licenses-dir ## Build the Operator manager image
+build-image: $(GO) licenses-dir ## Build the Operator manager image
 	@echo "Building manager binary for linux/$(TARGET_ARCH)"
-	@CGO_ENABLED=0 GOOS=linux GOARCH=$(TARGET_ARCH) $(GO) build -a -o build/_output/bin/manager main.go
+	@CGO_ENABLED=0 GOOS=linux GOARCH=$(TARGET_ARCH) $(GO) build -a -o build/_output/bin/manager cmd/main.go
 	@echo "Building manager image for linux/$(TARGET_ARCH)"
 	@DOCKER_BUILDKIT=1 $(CONTAINER_CLI) build --platform=linux/$(TARGET_ARCH) ${IMAGE_BUILD_OPTS} -t $(REGISTRY)/$(IMG)-$(TARGET_ARCH):$(GIT_COMMIT_ID) -f ./Dockerfile .
 	@echo "Inspect built image $(REGISTRY)/$(IMG)-$(TARGET_ARCH):$(GIT_COMMIT_ID)"
@@ -386,16 +432,18 @@ build-image-ppc64le: build-image
 build-image-s390x: TARGET_ARCH=s390x
 build-image-s390x: build-image
 
-images: $(CONFIG_DOCKER_TARGET)  ## Build the multi-arch manifest.
+images:
 	@${MAKE} build-image-amd64
 	@${MAKE} build-image-ppc64le
 	@${MAKE} build-image-s390x
-	@DOCKER_BUILDKIT=1 MAX_PULLING_RETRY=20 RETRY_INTERVAL=30 common/scripts/multiarch_image.sh $(REGISTRY) $(IMG) $(GIT_COMMIT_ID) $(VERSION)
+	@if [ "$(SPS_EVENT_TYPE)" = "push" ]; then \
+		DOCKER_BUILDKIT=1 MAX_PULLING_RETRY=20 RETRY_INTERVAL=30 common/scripts/multiarch_image.sh $(REGISTRY) $(IMG) $(GIT_COMMIT_ID) $(VERSION); \
+	fi
 
 ##@ Deployment
 
-ifndef ignore-not-found
-  ignore-not-found = false
+ifndef IGNORE_NOT_FOUND
+  IGNORE_NOT_FOUND = false
 endif
 
 .PHONY: install
@@ -404,18 +452,23 @@ install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~
 
 .PHONY: uninstall
 uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
-	$(KUSTOMIZE) build config/crd | kubectl delete --ignore-not-found=$(ignore-not-found) -f -
+	$(KUSTOMIZE) build config/crd | kubectl delete --ignore-not-found=$(IGNORE_NOT_FOUND) -f -
 
 .PHONY: deploy
 deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
-	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
-	$(KUSTOMIZE) build config/default | kubectl apply -f -
-	- oc apply -f config/samples/bases/operator_v1alpha1_authentication.yaml -n ${NAMESPACE}
+	kubectl get namespace $(CONTROL_NS) || kubectl create namespace $(CONTROL_NS)
+	kubectl get namespace $(DATA_NS) || kubectl create namespace $(DATA_NS)
+	cd config/manager/overlays/$(MODE) && $(KUSTOMIZE) edit set image controller=$(IMAGE_TAG_BASE):$(VERSION)
+	#@ 
+	WATCH_NS=$(WATCH_NS) $(YQ) -i 'with(.[] | select(.value.name == "WATCH_NAMESPACE") ; .value.value |= env(WATCH_NS))' \
+		config/manager/overlays/$(MODE)/image_env_vars_patch.yaml
+	$(KUSTOMIZE) build config/default/overlays/$(MODE) | kubectl apply -n $(CONTROL_NS) -f -
+	$(KUSTOMIZE) build config/samples/overlays/$(MODE) | kubectl apply -n $(DATA_NS) -f -
 
 .PHONY: undeploy
 undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
-	- oc delete -f config/samples/bases/operator_v1alpha1_authentication.yaml -n ${NAMESPACE}
-	$(KUSTOMIZE) build config/default | kubectl delete --ignore-not-found=$(ignore-not-found) -f -
+	$(KUSTOMIZE) build config/samples/overlays/$(MODE) | kubectl delete --ignore-not-found=$(IGNORE_NOT_FOUND) -n $(DATA_NS) -f -
+	$(KUSTOMIZE) build config/default/overlays/$(MODE) | kubectl delete --ignore-not-found=$(IGNORE_NOT_FOUND) -n $(CONTROL_NS) -f -
 
 # A comma-separated list of bundle images (e.g. make catalog-build BUNDLE_IMGS=example.com/operator-bundle:v0.1.0,example.com/operator-bundle:v0.2.0).
 # These images MUST exist in a registry and be pull-able.
@@ -448,3 +501,19 @@ clean-all: clean-bin clean-dev clean-licenses ## Runs all cleanup targets.
 
 
 .PHONY: all build run check install uninstall code-dev test test-e2e coverage images csv clean-all clean-bin clean-dev clean-licenses help
+
+# go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
+# $1 - target path with name of binary
+# $2 - package url which can be installed
+# $3 - specific version of package
+define go-install-tool
+@[ -f "$(1)-$(3)" ] || { \
+set -e; \
+package=$(2)@$(3) ;\
+echo "Downloading $${package}" ;\
+rm -f $(1) || true ;\
+GOBIN=$(LOCALBIN) $(GO) install $${package} ;\
+mv $(1) $(1)-$(3) ;\
+} ;\
+ln -sf $(1)-$(3) $(1)
+endef

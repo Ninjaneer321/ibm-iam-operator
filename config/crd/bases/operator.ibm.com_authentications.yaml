@@ -125,6 +125,9 @@ spec:
                 - ldapsCACert
                 - routerCertSecret
                 type: object
+              autoScaleConfig:
+                description: AutoScaleConfig is a boolean to enable or disable HPA
+                type: boolean
               clientRegistration:
                 properties:
                   imageName:
@@ -215,6 +218,12 @@ spec:
                     type: integer
                   preferredLogin:
                     type: string
+                  defaultLogin:
+                    type: string
+                  auditUrl:
+                    type: string
+                  auditSecret:
+                    type: string
                   providerIssuerURL:
                     type: string
                   roksEnabled:
@@ -239,6 +248,18 @@ spec:
                     type: boolean
                   attrMappingFromConfig:
                     type: boolean
+                  ingress:
+                    properties:
+                      hostname:
+                        type: string
+                      secret:
+                        type: string
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                  useSecretsStoreCSI:
+                    type: boolean
+                  accountIamURL:
+                    type: string
                 required:
                 - authUniqueHosts
                 - clusterCADomain
@@ -262,6 +283,7 @@ spec:
                 - wlpClientRegistrationSecret
                 - wlpClientSecret
                 type: object
+                x-kubernetes-preserve-unknown-fields: true
               identityManager:
                 properties:
                   imageName:
